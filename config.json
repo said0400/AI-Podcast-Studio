@@ -1,0 +1,7 @@
+{
+  "project": {"name": "AI Podcast Studio", "resolution": "1920x1080", "fps": 30},
+  "paths": {"audio": "input/audio/episode.wav", "project": "input/project.json", "characters": "assets/characters", "backgrounds": "assets/backgrounds", "output": "output"},
+  "director": {"min_shot_duration": 3.0, "camera_hysteresis": 1.0, "automatic_closeups": true, "reaction_shots": true},
+  "audio": {"target_sample_rate": 16000, "vad_mode": "energy", "separation_backend": "none", "overlap_policy": "preserve_master_and_review"},
+  "render": {"preview_scale": 0.25, "video_codec": "libx264", "crf": 20, "preset": "medium", "chunk_seconds": 2.0}
+}

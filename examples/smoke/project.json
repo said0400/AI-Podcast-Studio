@@ -1,0 +1,26 @@
+{
+  "project": {
+    "name": "Synthetic smoke-test tone (not speech)",
+    "resolution": "640x360",
+    "fps": 10
+  },
+  "characters": {
+    "char_1": {
+      "name": "Demo",
+      "speaker_id": "Speaker_0",
+      "position": "center"
+    }
+  },
+  "segments": [
+    {
+      "start": 0.35,
+      "end": 1.3,
+      "speaker_id": "Speaker_0"
+    }
+  ],
+  "director": {
+    "mode": "hybrid",
+    "automatic_closeups": true,
+    "min_shot_duration": 0.5
+  }
+}

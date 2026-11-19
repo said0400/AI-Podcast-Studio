@@ -1,0 +1,25 @@
+{
+  "project": {"name": "Sample episode", "resolution": "1920x1080", "fps": 30},
+  "characters": {
+    "char_1": {"name": "Mina", "speaker_id": "Speaker_0", "position": "left"},
+    "char_2": {"name": "Omar", "speaker_id": "Speaker_1", "position": "center"},
+    "char_3": {"name": "Nour", "speaker_id": "Speaker_2", "position": "right"}
+  },
+  "segments": [
+    {"start": 0.4, "end": 2.7, "speaker_id": "Speaker_0", "confidence": 1.0},
+    {"start": 2.2, "end": 3.9, "speaker_id": "Speaker_1", "confidence": 1.0, "overlap": true}
+  ],
+  "models": {
+    "vad": "energy",
+    "diarization": "manual",
+    "separation": "none",
+    "num_speakers": 3,
+    "cache_dir": "models/cache",
+    "source_to_character": {}
+  },
+  "audio": {"final_mix": "original"},
+  "director": {"mode": "hybrid", "automatic_closeups": true, "reaction_shots": true, "min_shot_duration": 3.0},
+  "cues": [
+    {"time": 8.0, "camera": "three_shot", "character": "char_3", "expression": "surprised", "motion": "react", "priority": 7, "reaction_delay": 0.25, "transition": "dissolve"}
+  ]
+}

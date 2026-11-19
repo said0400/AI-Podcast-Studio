@@ -1,0 +1,12 @@
+# CPU-only base pipeline. No paid API or model download is required.
+numpy>=1.24,<3
+Pillow>=10,<13
+soundfile>=0.12,<1
+jsonschema>=4.20,<5
+
+# Tests / optional resource monitoring:
+pytest>=8,<9
+psutil>=5.9,<8
+
+# Optional neural backends (torch, speechbrain, silero-vad, scipy) are declared
+# in pyproject.toml's [project.optional-dependencies].neural group, not installed here.
