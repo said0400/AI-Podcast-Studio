@@ -13,8 +13,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from .animation import CharacterRig, resize_character
-from .director import Director, Shot, active_at
-from .lipsync import mouth_at
+from .director import Director, ManualCameraCues, Shot, active_at
+from .lipsync import build_cue_index, indexed_mouth_at, speech_energy
 
 LOGGER = logging.getLogger(__name__)
 MAX_RENDER_DIMENSION = 8192
@@ -64,21 +64,66 @@ def compose_background(folder: Path, size: tuple[int, int], time_seconds: float)
     return frame
 
 
-def _camera_crop(frame: Image.Image, shot: Any, positions: dict[str, int], time_seconds: float) -> Image.Image:
-    """Apply a gently eased zoom and focus crop for the selected shot."""
-    w, h = frame.size
-    kind = getattr(shot, "kind", "wide")
-    target_zoom = 1.16 if kind == "speaker_focus" else 1.035 if kind == "two_shot" else 1.0
-    started = float(getattr(shot, "started_at", 0.0))
-    eased = min(1.0, max(0.0, (time_seconds - started) / 0.7))
-    eased = eased * eased * (3.0 - 2.0 * eased)
-    zoom = 1.0 + (target_zoom - 1.0) * eased
-    focus = getattr(shot, "focus", None)
-    center_x = positions.get(focus, w // 2) if focus else w // 2
-    crop_w, crop_h = w / zoom, h / zoom
-    left = max(0.0, min(w - crop_w, center_x - crop_w / 2))
-    top = max(0.0, min(h - crop_h, h - crop_h / 2))
-    return frame.crop((int(left), int(top), int(left + crop_w), int(top + crop_h))).resize((w, h), Image.Resampling.LANCZOS)
+class CameraRig:
+    """Smoothed virtual camera: glides between framings instead of snapping.
+
+    Position and zoom follow their targets with exponential smoothing, a slow
+    push-in builds over each held shot, and a small drift keeps long shots alive.
+    State advances frame by frame, so call ``update`` with increasing times.
+    """
+    ZOOM = {"wide": 1.0, "two_shot": 1.06, "speaker_focus": 1.3}
+
+    def __init__(self, size: tuple[int, int]) -> None:
+        self.width, self.height = size
+        self.cx = self.width / 2.0
+        self.cy = self.height / 2.0
+        self.zoom = 1.0
+        self._last_time: float | None = None
+        self._snap = True
+
+    def snap(self) -> None:
+        """Jump straight to the next target (used for hard cuts and crossfades)."""
+        self._snap = True
+
+    def update(self, shot: Any, positions: dict[str, int], time_seconds: float,
+               character_height: int) -> tuple[float, float, float, float]:
+        w, h = self.width, self.height
+        kind = getattr(shot, "kind", "wide")
+        focus = getattr(shot, "focus", None)
+        held = max(0.0, time_seconds - float(getattr(shot, "started_at", 0.0)))
+        push_in = 1.0 + 0.025 * min(1.0, held / 8.0) if kind != "wide" else 1.0
+        target_zoom = max(1.0, self.ZOOM.get(kind, 1.0) * push_in)
+        target_cx = float(positions.get(focus, w / 2)) if (kind == "speaker_focus" and focus) else w / 2.0
+        target_cx += w * 0.004 * math.sin(2 * math.pi * time_seconds / 9.0) if kind != "wide" else 0.0
+        if kind == "speaker_focus":
+            # Frame head and upper body: aim at ~38% down the character sprite.
+            target_cy = (h - character_height) + 0.38 * character_height
+        else:
+            target_cy = h / 2.0
+        dt = 0.0 if self._last_time is None else max(0.0, time_seconds - self._last_time)
+        self._last_time = time_seconds
+        if self._snap:
+            self.cx, self.cy, self.zoom = target_cx, target_cy, target_zoom
+            self._snap = False
+        else:
+            move = 1.0 - math.exp(-dt / 0.55)
+            zoom_move = 1.0 - math.exp(-dt / 0.70)
+            self.cx += (target_cx - self.cx) * move
+            self.cy += (target_cy - self.cy) * move
+            self.zoom += (target_zoom - self.zoom) * zoom_move
+        crop_w, crop_h = w / self.zoom, h / self.zoom
+        left = max(0.0, min(w - crop_w, self.cx - crop_w / 2))
+        top = max(0.0, min(h - crop_h, self.cy - crop_h / 2))
+        return left, top, left + crop_w, top + crop_h
+
+
+def _apply_camera(frame: Image.Image, box: tuple[float, float, float, float]) -> Image.Image:
+    """Crop with sub-pixel precision so slow camera moves do not jitter."""
+    left, top, right, bottom = box
+    box = (max(0.0, left), max(0.0, top), min(float(frame.width), right), min(float(frame.height), bottom))
+    if box == (0.0, 0.0, float(frame.width), float(frame.height)):
+        return frame
+    return frame.resize(frame.size, Image.Resampling.LANCZOS, box=box)
 
 
 def render_video(*, audio_path: Path, project: dict[str, Any], character_root: Path,
@@ -114,13 +159,15 @@ def render_video(*, audio_path: Path, project: dict[str, Any], character_root: P
                        float(director_cfg.get("camera_hysteresis", 1.0)),
                        bool(director_cfg.get("automatic_closeups", True)))
     manual_cues = sorted(project.get("cues", []), key=lambda item: float(item.get("time", 0)))
-    camera_cues = [cue for cue in manual_cues if cue.get("camera")]
+    camera_mode = str(director_cfg.get("mode", "hybrid")).lower()
+    manual_camera = ManualCameraCues(manual_cues, camera_mode,
+                                     float(director_cfg.get("cue_hold_seconds", 4.0)), char_specs)
+    camera = CameraRig((width, height))
+    cue_index = {char_id: build_cue_index(cues_by_character.get(char_id, [])) for char_id in char_specs}
+    look_state = {char_id: 0.0 for char_id in char_specs}
     expression_cues = [cue for cue in manual_cues if cue.get("expression") and cue.get("character") in char_specs]
-    camera_index = 0
     expression_index = 0
-    current_camera_cue: dict[str, Any] | None = None
     expressions = {char_id: "neutral" for char_id in char_specs}
-    last_shot_key: tuple[str, str | None] | None = None
     last_camera_frame: Image.Image | None = None
     transition_from: Image.Image | None = None
     transition_started = 0.0
@@ -142,38 +189,43 @@ def render_video(*, audio_path: Path, project: dict[str, Any], character_root: P
             for frame_index in range(frame_count):
                 t = frame_index / fps
                 active = active_at(segments, t, speaker_to_character)
-                shot = director.update(t, active)
-                while camera_index < len(camera_cues) and float(camera_cues[camera_index].get("time", 0)) <= t:
-                    current_camera_cue = camera_cues[camera_index]
-                    camera_index += 1
-                if current_camera_cue:
-                    camera_name = str(current_camera_cue.get("camera", "")).lower().replace("-", "_").replace(" ", "_")
-                    shot_aliases = {"wide_shot": "wide", "three_shot": "wide", "medium": "two_shot",
-                                    "close_up": "speaker_focus", "extreme_close_up": "speaker_focus",
-                                    "reaction_shot": "speaker_focus", "over_the_shoulder": "two_shot"}
-                    kind = shot_aliases.get(camera_name, camera_name)
-                    if kind in {"wide", "two_shot", "speaker_focus"}:
-                        focus = current_camera_cue.get("character") if kind == "speaker_focus" else None
-                        shot = Shot(kind, focus if focus in char_specs else None,
-                                    float(current_camera_cue.get("time", 0)),
-                                    int(current_camera_cue.get("priority", 5)))
+                mouths = {char_id: indexed_mouth_at(cue_index[char_id], t) for char_id in char_specs}
+                energies = {char_id: speech_energy(cue_index[char_id], t) for char_id in char_specs}
+                loud = {char_id: e for char_id, e in energies.items() if e > 0.12}
+                if loud:
+                    speaker = max(sorted(loud), key=loud.get)
+                else:
+                    speaker = active[0] if active else None
+                director_input = active or ([speaker] if speaker else [])
+                shot = Shot() if camera_mode == "manual" else director.update(t, director_input)
+                manual_shot, cue_transition = manual_camera.step(t)
+                if manual_shot is not None:
+                    shot = manual_shot
+                if cue_transition is not None:
+                    # Cues cut or crossfade; automatic shot changes glide via CameraRig instead.
+                    camera.snap()
+                    if cue_transition in {"dissolve", "fade"} and last_camera_frame is not None:
+                        transition_from = last_camera_frame.copy()
+                        transition_started = t
+                    else:
+                        transition_from = None
                 while expression_index < len(expression_cues) and float(expression_cues[expression_index].get("time", 0)) <= t:
                     cue = expression_cues[expression_index]
                     expressions[str(cue["character"])] = str(cue["expression"]).lower()
                     expression_index += 1
-                shot_key = (shot.kind, shot.focus)
-                if last_shot_key is not None and shot_key != last_shot_key and last_camera_frame is not None:
-                    transition = str((current_camera_cue or {}).get("transition", "dissolve")).lower()
-                    transition_from = last_camera_frame.copy() if transition in {"dissolve", "fade"} else None
-                    transition_started = t
-                last_shot_key = shot_key
                 frame = compose_background(Path(background_root), (width, height), t)
                 for char_id, spec in char_specs.items():
-                    char_cues = cues_by_character.get(char_id, [])
-                    mouth = mouth_at(char_cues, t)
+                    mouth = mouths[char_id]
                     speaking = mouth not in {"X", "x", ""}
-                    sprite = resize_character(rigs[char_id].render(t, mouth=mouth, speaking=speaking,
-                                                                      expression=expressions[char_id]), character_height)
+                    listening = speaker is not None and char_id != speaker and energies[char_id] < 0.1
+                    target_look = 0.0
+                    if listening:
+                        target_look = max(-1.0, min(1.0, (positions[speaker] - positions[char_id]) / (width * 0.4)))
+                    look_state[char_id] += (target_look - look_state[char_id]) * (1.0 - math.exp(-1.0 / (fps * 0.25)))
+                    sprite = resize_character(rigs[char_id].render(
+                        t, mouth=mouth, speaking=speaking, expression=expressions[char_id],
+                        energy=energies[char_id], look=look_state[char_id], listening=listening),
+                        character_height)
                     x = positions[char_id] - sprite.width // 2
                     y = height - sprite.height
                     # Soft ground shadow, deliberately beneath each character.
@@ -181,7 +233,7 @@ def render_video(*, audio_path: Path, project: dict[str, Any], character_root: P
                     ImageDraw.Draw(shadow).ellipse((0, 5, shadow.width, 30), fill=(0, 0, 0, 75))
                     frame.alpha_composite(shadow, (x - 30, height - 34))
                     frame.alpha_composite(sprite, (x, y))
-                frame = _camera_crop(frame, shot, positions, t)
+                frame = _apply_camera(frame, camera.update(shot, positions, t, character_height))
                 if transition_from is not None:
                     alpha = min(1.0, max(0.0, (t - transition_started) / 0.45))
                     alpha = alpha * alpha * (3.0 - 2.0 * alpha)
