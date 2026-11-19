@@ -71,7 +71,9 @@ def energy_vad(audio: np.ndarray, sample_rate: int, *, frame_ms: int = 30,
     usable = (samples.size // frame) * frame
     chunks = samples[:usable].reshape(-1, frame) if usable else samples.reshape(1, -1)
     rms = np.sqrt(np.mean(np.square(chunks, dtype=np.float32), axis=1) + 1e-12)
-    floor = float(np.quantile(rms, 0.2)) if rms.size > 4 else float(rms.min())
+    # Noise floor from the quietest 5% of frames: dialogue can be >80% speech, so a
+    # higher percentile would land inside speech and hide most of it.
+    floor = float(np.quantile(rms, 0.05)) if rms.size > 4 else float(rms.min())
     threshold = max(float(absolute_floor), floor * 3.0)
     active = rms >= threshold
     gap_frames = max(0, round(max_gap_ms / frame_ms))
