@@ -50,3 +50,66 @@ def active_at(segments: list[dict], time_seconds: float, speaker_to_character: d
     return sorted({speaker_to_character[item["speaker_id"]] for item in segments
                    if item["start"] <= time_seconds < item["end"]
                    and item["speaker_id"] in speaker_to_character})
+
+
+SHOT_ALIASES = {"wide_shot": "wide", "three_shot": "wide", "medium": "two_shot",
+                "close_up": "speaker_focus", "extreme_close_up": "speaker_focus",
+                "reaction_shot": "speaker_focus", "over_the_shoulder": "two_shot"}
+
+
+def cue_to_shot(cue: dict, character_ids: Iterable[str]) -> Shot | None:
+    """Translate a manual camera cue to a Shot, or None if its camera name is unknown."""
+    name = str(cue.get("camera", "")).lower().replace("-", "_").replace(" ", "_")
+    kind = SHOT_ALIASES.get(name, name)
+    if kind not in {"wide", "two_shot", "speaker_focus"}:
+        return None
+    focus = cue.get("character") if kind == "speaker_focus" else None
+    return Shot(kind, focus if focus in set(character_ids) else None,
+                float(cue.get("time", 0)), int(cue.get("priority", 5)))
+
+
+class ManualCameraCues:
+    """Apply project ``cues`` camera instructions according to ``director.mode``.
+
+    * ``automatic``: camera cues are ignored; the rule-based Director decides everything.
+    * ``manual``: a cue holds until the next cue; before the first cue the shot is wide.
+    * ``hybrid`` (default): a cue overrides the Director for ``duration`` seconds
+      (cue field, else ``hold_seconds``), then control returns to the Director.
+    """
+
+    def __init__(self, cues: list[dict], mode: str, hold_seconds: float,
+                 character_ids: Iterable[str]) -> None:
+        self.mode = mode if mode in {"automatic", "manual", "hybrid"} else "hybrid"
+        self.hold_seconds = max(0.0, hold_seconds)
+        self.character_ids = list(character_ids)
+        self._cues = sorted((c for c in cues if c.get("camera")), key=lambda c: float(c.get("time", 0)))
+        self._index = 0
+        self._shot: Shot | None = None
+        self._expires = float("inf")
+
+    def step(self, t: float) -> tuple[Shot | None, str | None]:
+        """Return (active manual shot or None, transition name if a new cue just began)."""
+        new_transition: str | None = None
+        while self._index < len(self._cues) and float(self._cues[self._index].get("time", 0)) <= t:
+            cue = self._cues[self._index]
+            self._index += 1
+            if self.mode == "automatic":
+                continue
+            shot = cue_to_shot(cue, self.character_ids)
+            if shot is None:
+                continue
+            self._shot = shot
+            if self.mode == "hybrid":
+                try:
+                    hold = float(cue.get("duration", self.hold_seconds))
+                except (TypeError, ValueError):
+                    hold = self.hold_seconds
+                self._expires = float(cue.get("time", 0)) + max(0.0, hold)
+            else:
+                self._expires = float("inf")
+            new_transition = str(cue.get("transition", "dissolve")).lower()
+        if self._shot is not None and t >= self._expires:
+            self._shot = None
+        if self._shot is None:
+            new_transition = None
+        return self._shot, new_transition
