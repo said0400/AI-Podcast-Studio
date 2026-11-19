@@ -19,7 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--characters", type=Path, default=Path("assets/characters"))
     parser.add_argument("--backgrounds", type=Path, default=Path("assets/backgrounds"))
     parser.add_argument("--output", type=Path, default=Path("output"))
-    parser.add_argument("--schema", type=Path, default=Path("config/project.schema.json"))
+    parser.add_argument("--schema", type=Path, default=None,
+                        help="Optional JSON Schema path; defaults to the schema packaged with the library")
     parser.add_argument("--width", type=int, default=None, help="Override project resolution width")
     parser.add_argument("--height", type=int, default=None, help="Override project resolution height")
     parser.add_argument("--fps", type=int, default=None, help="Override project frame rate")
