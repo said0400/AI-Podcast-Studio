@@ -1,0 +1,116 @@
+{
+  "project": {
+    "name": "Three-character synthetic dialogue (tones, not speech)",
+    "resolution": "1920x1080",
+    "fps": 30
+  },
+  "characters": {
+    "char_1": {
+      "name": "Mina",
+      "speaker_id": "Speaker_0",
+      "position": "left"
+    },
+    "char_2": {
+      "name": "Omar",
+      "speaker_id": "Speaker_1",
+      "position": "center"
+    },
+    "char_3": {
+      "name": "Nour",
+      "speaker_id": "Speaker_2",
+      "position": "right"
+    }
+  },
+  "segments": [
+    {
+      "start": 0.6,
+      "end": 4.0,
+      "speaker_id": "Speaker_0",
+      "confidence": 1.0
+    },
+    {
+      "start": 4.6,
+      "end": 8.2,
+      "speaker_id": "Speaker_1",
+      "confidence": 1.0
+    },
+    {
+      "start": 8.8,
+      "end": 12.2,
+      "speaker_id": "Speaker_2",
+      "confidence": 1.0
+    },
+    {
+      "start": 12.8,
+      "end": 15.4,
+      "speaker_id": "Speaker_0",
+      "confidence": 1.0
+    },
+    {
+      "start": 16.0,
+      "end": 19.2,
+      "speaker_id": "Speaker_2",
+      "confidence": 1.0
+    },
+    {
+      "start": 19.8,
+      "end": 22.4,
+      "speaker_id": "Speaker_1",
+      "confidence": 1.0
+    },
+    {
+      "start": 23.0,
+      "end": 26.0,
+      "speaker_id": "Speaker_0",
+      "confidence": 1.0
+    }
+  ],
+  "models": {
+    "vad": "energy",
+    "diarization": "manual",
+    "separation": "none",
+    "cache_dir": "models/cache",
+    "source_to_character": {}
+  },
+  "audio": {
+    "final_mix": "original"
+  },
+  "director": {
+    "mode": "hybrid",
+    "automatic_closeups": true,
+    "reaction_shots": true,
+    "min_shot_duration": 2.0,
+    "cue_hold_seconds": 3.0
+  },
+  "cues": [
+    {
+      "time": 5.0,
+      "character": "char_2",
+      "expression": "happy"
+    },
+    {
+      "time": 13.0,
+      "camera": "wide_shot",
+      "duration": 1.5,
+      "transition": "cut"
+    },
+    {
+      "time": 16.0,
+      "character": "char_3",
+      "expression": "sad"
+    },
+    {
+      "time": 19.5,
+      "character": "char_3",
+      "expression": "neutral"
+    },
+    {
+      "time": 20.0,
+      "camera": "close_up",
+      "character": "char_2",
+      "duration": 2.0,
+      "transition": "dissolve"
+    }
+  ]
+}
+
