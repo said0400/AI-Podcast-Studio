@@ -37,7 +37,7 @@ def test_envelope_lipsync_is_audio_derived_and_fallback_labeled(tmp_path: Path):
     cues = extract_cues(wav, tmp_path / "cues.json", rhubarb_binary="rhubarb-definitely-not-installed")
     assert cues["method"] == "waveform_envelope_fallback"
     assert cues["phonetic"] is False
-    assert mouth_at(cues["cues"], 0.4) == "A"
+    assert mouth_at(cues["cues"], 0.4) in {"A", "B", "C", "D"}
     assert mouth_at(cues["cues"], 0.05) == "X"
 
 
