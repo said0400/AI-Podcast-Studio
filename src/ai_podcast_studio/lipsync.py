@@ -5,6 +5,7 @@ import json
 import math
 import shutil
 import subprocess
+from bisect import bisect_right
 from pathlib import Path
 from typing import Any
 
@@ -46,30 +47,68 @@ def sanitize_cues(cues: Any, duration: float) -> tuple[list[dict[str, Any]], lis
     return clean, warnings
 
 
-def envelope_cues(audio_path: Path, *, bin_seconds: float = 0.08, threshold: float = 0.012) -> list[dict[str, Any]]:
-    """Create open/closed cues from the waveform envelope, not from transcript text.
+# Relative "openness" of each Rhubarb mouth shape, used for audio-driven body motion.
+MOUTH_INTENSITY = {"X": 0.0, "A": 0.3, "B": 0.5, "C": 0.7, "D": 1.0,
+                   "E": 0.75, "F": 0.45, "G": 0.4, "H": 0.8}
 
-    This fallback is timing-only (A while audible, X while quiet), not phoneme
-    recognition. Use Rhubarb for phonetic mouth-shape estimates.
+
+def _merge_short_runs(values: list[str], min_bins: int) -> list[str]:
+    """Absorb runs shorter than ``min_bins`` into the preceding run to stop flicker."""
+    if min_bins <= 1 or not values:
+        return values
+    runs: list[list[Any]] = []
+    for value in values:
+        if runs and runs[-1][0] == value:
+            runs[-1][1] += 1
+        else:
+            runs.append([value, 1])
+    for index, run in enumerate(runs):
+        if run[1] < min_bins and index > 0:
+            run[0] = runs[index - 1][0]
+    merged: list[str] = []
+    for value, count in runs:
+        merged.extend([value] * count)
+    return merged
+
+
+def envelope_cues(audio_path: Path, *, bin_seconds: float = 0.04, threshold: float = 0.012,
+                  min_hold_seconds: float = 0.08) -> list[dict[str, Any]]:
+    """Create graded mouth-opening cues from the smoothed waveform envelope.
+
+    Quiet -> X; audible speech is graded A (barely open) .. D (wide open) relative
+    to the recording's own loud passages. This follows loudness only; it is NOT
+    phoneme recognition. Use Rhubarb for phonetic mouth-shape estimates.
     """
     samples, rate = sf.read(str(audio_path), dtype="float32", always_2d=True)
     mono = samples.mean(axis=1)
     if not len(mono):
         return []
     width = max(1, round(rate * bin_seconds))
+    bins = math.ceil(len(mono) / width)
+    padded = np.zeros(bins * width, dtype=np.float64)
+    padded[:len(mono)] = mono
+    sums = np.square(padded).reshape(bins, width).sum(axis=1)
+    counts = np.full(bins, width, dtype=np.float64)
+    counts[-1] = len(mono) - (bins - 1) * width
+    rms = np.sqrt(sums / counts + 1e-12)
+    if bins >= 3:
+        rms = np.convolve(np.pad(rms, 1, mode="edge"), [0.25, 0.5, 0.25], mode="valid")
+    active = rms >= threshold
+    reference = float(np.percentile(rms[active], 90)) if active.any() else 1.0
+    level = rms / max(reference, 1e-9)
+    values = ["X" if not active[i] else
+              "A" if level[i] < 0.30 else "B" if level[i] < 0.55 else "C" if level[i] < 0.80 else "D"
+              for i in range(bins)]
+    values = _merge_short_runs(values, max(1, round(min_hold_seconds / bin_seconds)))
     cues: list[dict[str, Any]] = []
-    last = None
-    for offset in range(0, len(mono), width):
-        segment = mono[offset:offset + width]
-        rms = float(np.sqrt(np.mean(segment * segment) + 1e-12))
-        value = "A" if rms >= threshold else "X"
-        begin = offset / rate
-        end = min(len(mono) / rate, (offset + len(segment)) / rate)
-        if last == value and cues:
+    duration = len(mono) / rate
+    for index, value in enumerate(values):
+        begin = index * width / rate
+        end = min(duration, (index + 1) * width / rate)
+        if cues and cues[-1]["value"] == value:
             cues[-1]["end"] = end
         else:
             cues.append({"start": begin, "end": end, "value": value})
-            last = value
     return cues
 
 
@@ -129,3 +168,43 @@ def mouth_at(cues: list[dict[str, Any]], time_seconds: float) -> str:
         if math.isfinite(start) and math.isfinite(end) and value in MOUTH_SHAPES and start <= time_seconds < end:
             return value
     return "X"
+
+
+def build_cue_index(cues: Any) -> dict[str, list]:
+    """Sorted lookup arrays so per-frame mouth queries are O(log n), not O(n)."""
+    rows: list[tuple[float, float, str]] = []
+    for cue in cues if isinstance(cues, list) else []:
+        if not isinstance(cue, dict):
+            continue
+        try:
+            start, end = float(cue.get("start")), float(cue.get("end"))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        value = str(cue.get("value", "X")).upper()
+        if math.isfinite(start) and math.isfinite(end) and end > start and value in MOUTH_SHAPES:
+            rows.append((start, end, value))
+    rows.sort()
+    return {"starts": [r[0] for r in rows], "ends": [r[1] for r in rows], "values": [r[2] for r in rows]}
+
+
+def indexed_mouth_at(index: dict[str, list], time_seconds: float) -> str:
+    """Same result as ``mouth_at`` for non-overlapping cues, using a built index."""
+    position = bisect_right(index["starts"], time_seconds) - 1
+    if position >= 0 and time_seconds < index["ends"][position]:
+        return index["values"][position]
+    return "X"
+
+
+def speech_energy(index: dict[str, list], time_seconds: float, *,
+                  before: float = 0.25, after: float = 0.15, samples: int = 8) -> float:
+    """Mean mouth openness (0..1) around a time; drives nods and emphasis.
+
+    Looking slightly ahead lets head motion anticipate syllables instead of lagging them.
+    """
+    if not index["starts"]:
+        return 0.0
+    total = 0.0
+    for step in range(samples):
+        probe = time_seconds - before + (before + after) * step / max(1, samples - 1)
+        total += MOUTH_INTENSITY.get(indexed_mouth_at(index, probe), 0.0)
+    return total / samples
