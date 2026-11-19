@@ -188,6 +188,11 @@ def run_pipeline(*, audio_path: Path, project_path: Path, character_root: Path,
     separation_run_dir = work_dir / "separated_sources" / fingerprint[:16]
     source_map = models.get("source_to_character", {})
     separation_requested = str(models.get("separation", "none")) == "sepformer"
+    if source_map and not separation_requested:
+        warning = ("models.source_to_character is set but models.separation is not 'sepformer'; "
+                   "the mapping is ignored and no separated stems exist.")
+        LOGGER.warning(warning)
+        separation_status["warnings"] = [warning]
     if separation_requested:
         try:
             from .audio_mixer import write_source_stems
