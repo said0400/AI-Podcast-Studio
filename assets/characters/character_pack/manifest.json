@@ -1,0 +1,101 @@
+{
+  "canvas_px": [
+    1536,
+    2304
+  ],
+  "state_count": 6,
+  "layers_per_state": 13,
+  "layer_png_count": 78,
+  "states": {
+    "neutral": [
+      "layers/neutral/01_hair.png",
+      "layers/neutral/02_ear_left.png",
+      "layers/neutral/03_ear_right.png",
+      "layers/neutral/04_brow_left.png",
+      "layers/neutral/05_brow_right.png",
+      "layers/neutral/06_eye_left.png",
+      "layers/neutral/07_eye_right.png",
+      "layers/neutral/08_nose.png",
+      "layers/neutral/09_mouth.png",
+      "layers/neutral/10_beard_moustache.png",
+      "layers/neutral/11_face_skin.png",
+      "layers/neutral/12_neck.png",
+      "layers/neutral/13_underpainting_rest.png"
+    ],
+    "joy": [
+      "layers/joy/01_hair.png",
+      "layers/joy/02_ear_left.png",
+      "layers/joy/03_ear_right.png",
+      "layers/joy/04_brow_left.png",
+      "layers/joy/05_brow_right.png",
+      "layers/joy/06_eye_left.png",
+      "layers/joy/07_eye_right.png",
+      "layers/joy/08_nose.png",
+      "layers/joy/09_mouth.png",
+      "layers/joy/10_beard_moustache.png",
+      "layers/joy/11_face_skin.png",
+      "layers/joy/12_neck.png",
+      "layers/joy/13_underpainting_rest.png"
+    ],
+    "talking": [
+      "layers/talking/01_hair.png",
+      "layers/talking/02_ear_left.png",
+      "layers/talking/03_ear_right.png",
+      "layers/talking/04_brow_left.png",
+      "layers/talking/05_brow_right.png",
+      "layers/talking/06_eye_left.png",
+      "layers/talking/07_eye_right.png",
+      "layers/talking/08_nose.png",
+      "layers/talking/09_mouth.png",
+      "layers/talking/10_beard_moustache.png",
+      "layers/talking/11_face_skin.png",
+      "layers/talking/12_neck.png",
+      "layers/talking/13_underpainting_rest.png"
+    ],
+    "surprised": [
+      "layers/surprised/01_hair.png",
+      "layers/surprised/02_ear_left.png",
+      "layers/surprised/03_ear_right.png",
+      "layers/surprised/04_brow_left.png",
+      "layers/surprised/05_brow_right.png",
+      "layers/surprised/06_eye_left.png",
+      "layers/surprised/07_eye_right.png",
+      "layers/surprised/08_nose.png",
+      "layers/surprised/09_mouth.png",
+      "layers/surprised/10_beard_moustache.png",
+      "layers/surprised/11_face_skin.png",
+      "layers/surprised/12_neck.png",
+      "layers/surprised/13_underpainting_rest.png"
+    ],
+    "angry": [
+      "layers/angry/01_hair.png",
+      "layers/angry/02_ear_left.png",
+      "layers/angry/03_ear_right.png",
+      "layers/angry/04_brow_left.png",
+      "layers/angry/05_brow_right.png",
+      "layers/angry/06_eye_left.png",
+      "layers/angry/07_eye_right.png",
+      "layers/angry/08_nose.png",
+      "layers/angry/09_mouth.png",
+      "layers/angry/10_beard_moustache.png",
+      "layers/angry/11_face_skin.png",
+      "layers/angry/12_neck.png",
+      "layers/angry/13_underpainting_rest.png"
+    ],
+    "thoughtful": [
+      "layers/thoughtful/01_hair.png",
+      "layers/thoughtful/02_ear_left.png",
+      "layers/thoughtful/03_ear_right.png",
+      "layers/thoughtful/04_brow_left.png",
+      "layers/thoughtful/05_brow_right.png",
+      "layers/thoughtful/06_eye_left.png",
+      "layers/thoughtful/07_eye_right.png",
+      "layers/thoughtful/08_nose.png",
+      "layers/thoughtful/09_mouth.png",
+      "layers/thoughtful/10_beard_moustache.png",
+      "layers/thoughtful/11_face_skin.png",
+      "layers/thoughtful/12_neck.png",
+      "layers/thoughtful/13_underpainting_rest.png"
+    ]
+  }
+}
